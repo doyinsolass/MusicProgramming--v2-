@@ -1,7 +1,3 @@
-// Advanced Web Audio Player — scaffold with wiring and TODOs
-// Fill in the processing logic yourself to comply with your AI usage policy.
-
-// ----- Audio context and globals -----
 let audioCtx;
 let mediaElementSource;
 let mediaRecorder;
@@ -13,7 +9,6 @@ let analyserMode = 'spectrum';
 
 let masterGain;
 
-// Effect nodes (instantiate lazily)
 let convolver, reverbDryGain, reverbWetGain;
 let compressor;
 let stereoPanner;
@@ -21,17 +16,13 @@ let stereoPanner;
 let delayNode, delayFeedbackGain, delayDryGain, delayWetGain;
 let distortion, distortionWetGain, distortionDryGain;
 
-// Filter nodes — disabled until enabled
 let lpFilter, hpFilter, bpFilter, ntFilter, pkFilter;
 
-// Synthesis nodes
 let oscNode, oscGainNode;
 
-// Rhythm resources
 let rhythmBuffers = { kick: null, snare: null, hat: null };
 let rhythmIsPlaying = false;
 
-// DOM
 const els = {
   fileInput: document.getElementById('fileInput'),
   htmlAudio: document.getElementById('htmlAudio'),
@@ -126,11 +117,9 @@ function ensureCtx() {
     analyser.fftSize = parseInt(els.fftSizeSelect.value, 10);
     analyser.smoothingTimeConstant = parseFloat(els.smoothingSlider.value);
 
-    // Master chain ends at destination
     masterGain.connect(analyser);
     analyser.connect(audioCtx.destination);
 
-    // Enable recording when context exists
     els.startRecBtn.disabled = false;
     initMousePan();
   }
@@ -145,7 +134,6 @@ function connectMediaElement() {
   }
 }
 
-// ----- File handling & transport -----
 els.fileInput.addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
@@ -154,10 +142,8 @@ els.fileInput.addEventListener('change', async (e) => {
   els.htmlAudio.src = url;
   els.htmlAudio.load();
 
-  // Ensure audio context and media source
   connectMediaElement();
 
-  // Enable transport controls
   els.playBtn.disabled = false;
   els.pauseBtn.disabled = false;
   els.stopBtn.disabled = false;
@@ -179,11 +165,8 @@ els.stopBtn.addEventListener('click', () => {
   els.htmlAudio.currentTime = 0;
 });
 
-// ----- Recording (MediaRecorder on destination via captureStream) -----
 els.startRecBtn.addEventListener('click', () => {
-  // Create a temporary media element capturing destination
   const destStream = audioCtx.destination.stream || audioCtx.destination?.context?.createMediaStreamDestination?.().stream;
-  // Fallback: use the media element capture (works in some browsers)
   const mediaStream = els.htmlAudio.captureStream ? els.htmlAudio.captureStream() : destStream;
   if (!mediaStream) {
     alert('Recording is not supported in this browser.');
@@ -213,7 +196,6 @@ els.stopRecBtn.addEventListener('click', () => {
   }
 });
 
-// ----- Visualization -----
 const ctx2d = els.analyserCanvas.getContext('2d');
 
 function draw() {
@@ -268,8 +250,6 @@ els.vizModeSelect.addEventListener('change', (e) => {
   analyserMode = e.target.value;
 });
 
-// ----- Effects implementation (fill in your own logic details) -----
-// Convolver (Reverb)
 els.reverbEnableBtn.addEventListener('click', async () => {
   ensureCtx();
   if (!convolver) {
@@ -277,10 +257,6 @@ els.reverbEnableBtn.addEventListener('click', async () => {
     reverbDryGain = audioCtx.createGain();
     reverbWetGain = audioCtx.createGain();
 
-    // TODO: Load selected impulse buffer and assign to convolver.buffer
-    // Suggestion: fetch() the selected IR, decodeAudioData, set convolver.buffer
-
-    // Wiring: mediaElementSource -> [dry, wet paths] -> masterGain
     mediaElementSource.disconnect();
     mediaElementSource.connect(reverbDryGain);
     mediaElementSource.connect(convolver);
@@ -294,7 +270,6 @@ els.reverbEnableBtn.addEventListener('click', async () => {
 
 els.reverbDisableBtn.addEventListener('click', () => {
   if (!convolver) return;
-  // Disconnect and restore direct routing
   try {
     mediaElementSource.disconnect();
     reverbDryGain?.disconnect();
@@ -309,7 +284,6 @@ els.reverbDisableBtn.addEventListener('click', () => {
 
 els.impulseSelect.addEventListener('change', async () => {
   if (!convolver) return;
-  // TODO: Reload impulse response according to selection
 });
 
 function updateReverbMix() {
@@ -319,13 +293,11 @@ function updateReverbMix() {
   reverbWetGain.gain.value = mix;
 }
 
-// Compressor
 els.compAddBtn.addEventListener('click', () => {
   ensureCtx();
   if (!compressor) {
     compressor = audioCtx.createDynamicsCompressor();
     applyCompressorParams();
-    // Insert compressor before masterGain:
     mediaElementSource.disconnect();
     mediaElementSource.connect(compressor);
     compressor.connect(masterGain);
@@ -351,12 +323,10 @@ function applyCompressorParams() {
   els[id].addEventListener('input', applyCompressorParams);
 });
 
-// Stereo Panner
 els.panSlider.addEventListener('input', () => {
   ensureCtx();
   if (!stereoPanner) {
     stereoPanner = audioCtx.createStereoPanner();
-    // Insert in chain
     mediaElementSource.disconnect();
     mediaElementSource.connect(stereoPanner);
     stereoPanner.connect(masterGain);
@@ -378,7 +348,6 @@ function initMousePan() {
   });
 }
 
-// Delay
 els.delayEnableBtn.addEventListener('click', () => {
   ensureCtx();
   if (!delayNode) {
@@ -387,16 +356,12 @@ els.delayEnableBtn.addEventListener('click', () => {
     delayDryGain = audioCtx.createGain();
     delayWetGain = audioCtx.createGain();
 
-    // Wiring:
-    // media -> dryGain -> master
-    // media -> delayNode -> feedbackGain -> delayNode (feedback loop)
-    // delayNode -> wetGain -> master
     mediaElementSource.disconnect();
     mediaElementSource.connect(delayDryGain);
     mediaElementSource.connect(delayNode);
 
     delayNode.connect(delayFeedbackGain);
-    delayFeedbackGain.connect(delayNode); // feedback
+    delayFeedbackGain.connect(delayNode);
 
     delayNode.connect(delayWetGain);
 
@@ -434,7 +399,6 @@ function updateDelayParams() {
   delayWetGain.gain.value = mix;
 }
 
-// Distortion
 els.distEnableBtn.addEventListener('click', () => {
   ensureCtx();
   if (!distortion) {
@@ -472,8 +436,6 @@ els.distDisableBtn.addEventListener('click', () => {
   els[id].addEventListener('input', applyDistortionParams);
 });
 function makeDistCurve(amount) {
-  // TODO: Implement your own curve function
-  // Example approach: generate a curve based on arctangent or exponential shaping
   const n = 2048;
   const curve = new Float32Array(n);
   const k = amount;
@@ -493,7 +455,6 @@ function applyDistortionParams() {
   distortionWetGain.gain.value = mix;
 }
 
-// ----- Filters (BiquadFilterNode) -----
 function enableFilter(type, refs) {
   ensureCtx();
   const { nodeRefName, freqEl, qEl, gainEl } = refs;
@@ -502,7 +463,6 @@ function enableFilter(type, refs) {
     biq.type = type;
     window[nodeRefName] = biq;
 
-    // Insert into chain between mediaElementSource and masterGain:
     mediaElementSource.disconnect();
     mediaElementSource.connect(biq);
     biq.connect(masterGain);
@@ -524,7 +484,6 @@ function applyFilterParams(biq, freqEl, qEl, gainEl) {
   if (gainEl) biq.gain.value = parseFloat(gainEl.value);
 }
 
-// Low-pass
 els.lpEnableBtn.addEventListener('click', () => enableFilter('lowpass', {
   nodeRefName: 'lpFilter', freqEl: els.lpFreq, qEl: els.lpQ
 }));
@@ -533,7 +492,6 @@ els.lpDisableBtn.addEventListener('click', () => disableFilter('lpFilter'));
   if (lpFilter) applyFilterParams(lpFilter, els.lpFreq, els.lpQ);
 }));
 
-// High-pass
 els.hpEnableBtn.addEventListener('click', () => enableFilter('highpass', {
   nodeRefName: 'hpFilter', freqEl: els.hpFreq, qEl: els.hpQ
 }));
@@ -542,7 +500,6 @@ els.hpDisableBtn.addEventListener('click', () => disableFilter('hpFilter'));
   if (hpFilter) applyFilterParams(hpFilter, els.hpFreq, els.hpQ);
 }));
 
-// Band-pass
 els.bpEnableBtn.addEventListener('click', () => enableFilter('bandpass', {
   nodeRefName: 'bpFilter', freqEl: els.bpFreq, qEl: els.bpQ
 }));
@@ -551,7 +508,6 @@ els.bpDisableBtn.addEventListener('click', () => disableFilter('bpFilter'));
   if (bpFilter) applyFilterParams(bpFilter, els.bpFreq, els.bpQ);
 }));
 
-// Notch
 els.ntEnableBtn.addEventListener('click', () => enableFilter('notch', {
   nodeRefName: 'ntFilter', freqEl: els.ntFreq, qEl: els.ntQ
 }));
@@ -560,7 +516,6 @@ els.ntDisableBtn.addEventListener('click', () => disableFilter('ntFilter'));
   if (ntFilter) applyFilterParams(ntFilter, els.ntFreq, els.ntQ);
 }));
 
-// Peaking EQ
 els.pkEnableBtn.addEventListener('click', () => enableFilter('peaking', {
   nodeRefName: 'pkFilter', freqEl: els.pkFreq, qEl: els.pkQ, gainEl: els.pkGain
 }));
@@ -569,10 +524,9 @@ els.pkDisableBtn.addEventListener('click', () => disableFilter('pkFilter'));
   if (pkFilter) applyFilterParams(pkFilter, els.pkFreq, els.pkQ, els.pkGain);
 }));
 
-// ----- Synthesis -----
 els.oscStartBtn.addEventListener('click', () => {
   ensureCtx();
-  if (oscNode) return; // already running
+  if (oscNode) return; 
   oscNode = audioCtx.createOscillator();
   oscGainNode = audioCtx.createGain();
 
@@ -599,9 +553,6 @@ els.oscFreq.addEventListener('input', () => { if (oscNode) oscNode.frequency.val
 els.oscDetune.addEventListener('input', () => { if (oscNode) oscNode.detune.value = parseFloat(els.oscDetune.value); });
 els.oscGain.addEventListener('input', () => { if (oscGainNode) oscGainNode.gain.value = parseFloat(els.oscGain.value); });
 
-// ----- Rhythm (example scheduler using decoded buffers) -----
-// TODO: Load your own drum samples into rhythmBuffers (kick, snare, hat)
-// e.g., fetch('samples/kick.wav') -> decodeAudioData -> rhythmBuffers.kick = audioBuffer
 async function playRhythm(pattern, bpm) {
   ensureCtx();
   if (rhythmIsPlaying) return;
@@ -610,16 +561,14 @@ async function playRhythm(pattern, bpm) {
   const spb = 60 / bpm; // seconds per beat
   let startTime = audioCtx.currentTime + 0.1;
 
-  // Simple 1 bar pattern of 16 steps
   for (let step = 0; step < 16; step++) {
     const t = startTime + step * (spb / 4); // 16th notes
-    const hit = pattern[step]; // { kick:bool, snare:bool, hat:bool }
+    const hit = pattern[step]; // 
     if (hit.kick && rhythmBuffers.kick) triggerBuffer(rhythmBuffers.kick, t, 1.0);
     if (hit.snare && rhythmBuffers.snare) triggerBuffer(rhythmBuffers.snare, t, 0.9);
     if (hit.hat && rhythmBuffers.hat) triggerBuffer(rhythmBuffers.hat, t, 0.6);
   }
 
-  // Ends after one bar
   setTimeout(() => { rhythmIsPlaying = false; }, spb * 4 * 1000);
 }
 
@@ -652,18 +601,4 @@ els.playRhythm2Btn.addEventListener('click', () => {
   playRhythm(pattern, bpm);
 });
 
-// ----- Impulse loading (Reverb) helper -----
-// TODO: Implement your own asset loading and decoding for impulse responses.
-// Example approach:
-// async function loadIR(url) {
-//   const res = await fetch(url);
-//   const arr = await res.arrayBuffer();
-//   const buf = await audioCtx.decodeAudioData(arr);
-//   return buf;
-// }
-// Then set convolver.buffer = await loadIR(selectedUrl);
 
-// ----- Notes -----
-// - For save/download of the edited file with all processing, consider OfflineAudioContext for full rendering.
-// - MediaRecorder with captureStream is a pragmatic demo approach but may differ across browsers.
-// - Replace TODO sections with your own logic to comply with your coursework policy.
