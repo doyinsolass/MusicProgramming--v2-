@@ -1,0 +1,669 @@
+// Advanced Web Audio Player — scaffold with wiring and TODOs
+// Fill in the processing logic yourself to comply with your AI usage policy.
+
+// ----- Audio context and globals -----
+let audioCtx;
+let mediaElementSource;
+let mediaRecorder;
+let recordedChunks = [];
+
+let analyser;
+let analyserDataArray;
+let analyserMode = 'spectrum';
+
+let masterGain;
+
+// Effect nodes (instantiate lazily)
+let convolver, reverbDryGain, reverbWetGain;
+let compressor;
+let stereoPanner;
+
+let delayNode, delayFeedbackGain, delayDryGain, delayWetGain;
+let distortion, distortionWetGain, distortionDryGain;
+
+// Filter nodes — disabled until enabled
+let lpFilter, hpFilter, bpFilter, ntFilter, pkFilter;
+
+// Synthesis nodes
+let oscNode, oscGainNode;
+
+// Rhythm resources
+let rhythmBuffers = { kick: null, snare: null, hat: null };
+let rhythmIsPlaying = false;
+
+// DOM
+const els = {
+  fileInput: document.getElementById('fileInput'),
+  htmlAudio: document.getElementById('htmlAudio'),
+  playBtn: document.getElementById('playBtn'),
+  pauseBtn: document.getElementById('pauseBtn'),
+  stopBtn: document.getElementById('stopBtn'),
+  loopToggle: document.getElementById('loopToggle'),
+
+  startRecBtn: document.getElementById('startRecBtn'),
+  stopRecBtn: document.getElementById('stopRecBtn'),
+  downloadLink: document.getElementById('downloadLink'),
+
+  analyserCanvas: document.getElementById('analyserCanvas'),
+  smoothingSlider: document.getElementById('smoothingSlider'),
+  fftSizeSelect: document.getElementById('fftSizeSelect'),
+  vizModeSelect: document.getElementById('vizModeSelect'),
+
+  impulseSelect: document.getElementById('impulseSelect'),
+  reverbMix: document.getElementById('reverbMix'),
+  reverbEnableBtn: document.getElementById('reverbEnableBtn'),
+  reverbDisableBtn: document.getElementById('reverbDisableBtn'),
+
+  compThreshold: document.getElementById('compThreshold'),
+  compKnee: document.getElementById('compKnee'),
+  compRatio: document.getElementById('compRatio'),
+  compAttack: document.getElementById('compAttack'),
+  compRelease: document.getElementById('compRelease'),
+  compAddBtn: document.getElementById('compAddBtn'),
+  compRemoveBtn: document.getElementById('compRemoveBtn'),
+
+  panSlider: document.getElementById('panSlider'),
+  mousePanToggle: document.getElementById('mousePanToggle'),
+
+  delayTime: document.getElementById('delayTime'),
+  delayFeedback: document.getElementById('delayFeedback'),
+  delayMix: document.getElementById('delayMix'),
+  delayEnableBtn: document.getElementById('delayEnableBtn'),
+  delayDisableBtn: document.getElementById('delayDisableBtn'),
+
+  distAmount: document.getElementById('distAmount'),
+  distOversample: document.getElementById('distOversample'),
+  distMix: document.getElementById('distMix'),
+  distEnableBtn: document.getElementById('distEnableBtn'),
+  distDisableBtn: document.getElementById('distDisableBtn'),
+
+  lpFreq: document.getElementById('lpFreq'),
+  lpQ: document.getElementById('lpQ'),
+  lpEnableBtn: document.getElementById('lpEnableBtn'),
+  lpDisableBtn: document.getElementById('lpDisableBtn'),
+
+  hpFreq: document.getElementById('hpFreq'),
+  hpQ: document.getElementById('hpQ'),
+  hpEnableBtn: document.getElementById('hpEnableBtn'),
+  hpDisableBtn: document.getElementById('hpDisableBtn'),
+
+  bpFreq: document.getElementById('bpFreq'),
+  bpQ: document.getElementById('bpQ'),
+  bpEnableBtn: document.getElementById('bpEnableBtn'),
+  bpDisableBtn: document.getElementById('bpDisableBtn'),
+
+  ntFreq: document.getElementById('ntFreq'),
+  ntQ: document.getElementById('ntQ'),
+  ntEnableBtn: document.getElementById('ntEnableBtn'),
+  ntDisableBtn: document.getElementById('ntDisableBtn'),
+
+  pkFreq: document.getElementById('pkFreq'),
+  pkQ: document.getElementById('pkQ'),
+  pkGain: document.getElementById('pkGain'),
+  pkEnableBtn: document.getElementById('pkEnableBtn'),
+  pkDisableBtn: document.getElementById('pkDisableBtn'),
+
+  oscType: document.getElementById('oscType'),
+  oscFreq: document.getElementById('oscFreq'),
+  oscDetune: document.getElementById('oscDetune'),
+  oscGain: document.getElementById('oscGain'),
+  oscStartBtn: document.getElementById('oscStartBtn'),
+  oscStopBtn: document.getElementById('oscStopBtn'),
+
+  bpmSlider: document.getElementById('bpmSlider'),
+  playRhythm1Btn: document.getElementById('playRhythm1Btn'),
+  playRhythm2Btn: document.getElementById('playRhythm2Btn'),
+};
+
+// ----- Setup -----
+function ensureCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 1.0;
+
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = parseInt(els.fftSizeSelect.value, 10);
+    analyser.smoothingTimeConstant = parseFloat(els.smoothingSlider.value);
+
+    // Master chain ends at destination
+    masterGain.connect(analyser);
+    analyser.connect(audioCtx.destination);
+
+    // Enable recording when context exists
+    els.startRecBtn.disabled = false;
+    initMousePan();
+  }
+}
+
+function connectMediaElement() {
+  ensureCtx();
+  if (!mediaElementSource) {
+    mediaElementSource = audioCtx.createMediaElementSource(els.htmlAudio);
+    // Default: mediaElementSource -> masterGain
+    mediaElementSource.connect(masterGain);
+  }
+}
+
+// ----- File handling & transport -----
+els.fileInput.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const url = URL.createObjectURL(file);
+  els.htmlAudio.src = url;
+  els.htmlAudio.load();
+
+  // Ensure audio context and media source
+  connectMediaElement();
+
+  // Enable transport controls
+  els.playBtn.disabled = false;
+  els.pauseBtn.disabled = false;
+  els.stopBtn.disabled = false;
+});
+
+els.playBtn.addEventListener('click', async () => {
+  ensureCtx();
+  await audioCtx.resume();
+  els.htmlAudio.loop = els.loopToggle.checked;
+  els.htmlAudio.play();
+});
+
+els.pauseBtn.addEventListener('click', () => {
+  els.htmlAudio.pause();
+});
+
+els.stopBtn.addEventListener('click', () => {
+  els.htmlAudio.pause();
+  els.htmlAudio.currentTime = 0;
+});
+
+// ----- Recording (MediaRecorder on destination via captureStream) -----
+els.startRecBtn.addEventListener('click', () => {
+  // Create a temporary media element capturing destination
+  const destStream = audioCtx.destination.stream || audioCtx.destination?.context?.createMediaStreamDestination?.().stream;
+  // Fallback: use the media element capture (works in some browsers)
+  const mediaStream = els.htmlAudio.captureStream ? els.htmlAudio.captureStream() : destStream;
+  if (!mediaStream) {
+    alert('Recording is not supported in this browser.');
+    return;
+  }
+  recordedChunks = [];
+  mediaRecorder = new MediaRecorder(mediaStream);
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) recordedChunks.push(e.data);
+  };
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+    const url = URL.createObjectURL(blob);
+    els.downloadLink.href = url;
+    els.downloadLink.download = 'processed-audio.webm';
+    els.downloadLink.textContent = 'Download recording';
+    els.downloadLink.classList.remove('hidden');
+  };
+  mediaRecorder.start();
+  els.stopRecBtn.disabled = false;
+});
+
+els.stopRecBtn.addEventListener('click', () => {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+    els.stopRecBtn.disabled = true;
+  }
+});
+
+// ----- Visualization -----
+const ctx2d = els.analyserCanvas.getContext('2d');
+
+function draw() {
+  requestAnimationFrame(draw);
+  if (!analyser) return;
+
+  const bufferLength = analyser.frequencyBinCount;
+  if (!analyserDataArray || analyserDataArray.length !== bufferLength) {
+    analyserDataArray = new Uint8Array(bufferLength);
+  }
+
+  ctx2d.fillStyle = '#000';
+  ctx2d.fillRect(0, 0, els.analyserCanvas.width, els.analyserCanvas.height);
+
+  if (analyserMode === 'spectrum') {
+    analyser.getByteFrequencyData(analyserDataArray);
+    const barWidth = (els.analyserCanvas.width / bufferLength) * 1.5;
+    let x = 0;
+    for (let i = 0; i < bufferLength; i++) {
+      const v = analyserDataArray[i];
+      const h = (v / 255) * els.analyserCanvas.height;
+      ctx2d.fillStyle = `hsl(${(i / bufferLength) * 240}, 80%, 60%)`;
+      ctx2d.fillRect(x, els.analyserCanvas.height - h, barWidth, h);
+      x += barWidth + 1;
+    }
+  } else {
+    analyser.getByteTimeDomainData(analyserDataArray);
+    ctx2d.lineWidth = 2;
+    ctx2d.strokeStyle = '#42a5f5';
+    ctx2d.beginPath();
+    const sliceWidth = els.analyserCanvas.width / analyserDataArray.length;
+    let x = 0;
+    for (let i = 0; i < analyserDataArray.length; i++) {
+      const v = analyserDataArray[i] / 128.0;
+      const y = v * (els.analyserCanvas.height / 2);
+      if (i === 0) ctx2d.moveTo(x, y);
+      else ctx2d.lineTo(x, y);
+      x += sliceWidth;
+    }
+    ctx2d.stroke();
+  }
+}
+draw();
+
+els.smoothingSlider.addEventListener('input', () => {
+  if (analyser) analyser.smoothingTimeConstant = parseFloat(els.smoothingSlider.value);
+});
+els.fftSizeSelect.addEventListener('change', () => {
+  if (analyser) analyser.fftSize = parseInt(els.fftSizeSelect.value, 10);
+});
+els.vizModeSelect.addEventListener('change', (e) => {
+  analyserMode = e.target.value;
+});
+
+// ----- Effects implementation (fill in your own logic details) -----
+// Convolver (Reverb)
+els.reverbEnableBtn.addEventListener('click', async () => {
+  ensureCtx();
+  if (!convolver) {
+    convolver = audioCtx.createConvolver();
+    reverbDryGain = audioCtx.createGain();
+    reverbWetGain = audioCtx.createGain();
+
+    // TODO: Load selected impulse buffer and assign to convolver.buffer
+    // Suggestion: fetch() the selected IR, decodeAudioData, set convolver.buffer
+
+    // Wiring: mediaElementSource -> [dry, wet paths] -> masterGain
+    mediaElementSource.disconnect();
+    mediaElementSource.connect(reverbDryGain);
+    mediaElementSource.connect(convolver);
+    convolver.connect(reverbWetGain);
+
+    reverbDryGain.connect(masterGain);
+    reverbWetGain.connect(masterGain);
+  }
+  updateReverbMix();
+});
+
+els.reverbDisableBtn.addEventListener('click', () => {
+  if (!convolver) return;
+  // Disconnect and restore direct routing
+  try {
+    mediaElementSource.disconnect();
+    reverbDryGain?.disconnect();
+    convolver?.disconnect();
+    reverbWetGain?.disconnect();
+  } catch {}
+  mediaElementSource.connect(masterGain);
+  convolver = null;
+  reverbDryGain = null;
+  reverbWetGain = null;
+});
+
+els.impulseSelect.addEventListener('change', async () => {
+  if (!convolver) return;
+  // TODO: Reload impulse response according to selection
+});
+
+function updateReverbMix() {
+  if (!reverbDryGain || !reverbWetGain) return;
+  const mix = parseFloat(els.reverbMix.value);
+  reverbDryGain.gain.value = 1 - mix;
+  reverbWetGain.gain.value = mix;
+}
+
+// Compressor
+els.compAddBtn.addEventListener('click', () => {
+  ensureCtx();
+  if (!compressor) {
+    compressor = audioCtx.createDynamicsCompressor();
+    applyCompressorParams();
+    // Insert compressor before masterGain:
+    mediaElementSource.disconnect();
+    mediaElementSource.connect(compressor);
+    compressor.connect(masterGain);
+  }
+});
+
+els.compRemoveBtn.addEventListener('click', () => {
+  if (!compressor) return;
+  try { mediaElementSource.disconnect(); compressor.disconnect(); } catch {}
+  mediaElementSource.connect(masterGain);
+  compressor = null;
+});
+
+function applyCompressorParams() {
+  if (!compressor) return;
+  compressor.threshold.value = parseFloat(els.compThreshold.value);
+  compressor.knee.value = parseFloat(els.compKnee.value);
+  compressor.ratio.value = parseFloat(els.compRatio.value);
+  compressor.attack.value = parseFloat(els.compAttack.value);
+  compressor.release.value = parseFloat(els.compRelease.value);
+}
+['compThreshold','compKnee','compRatio','compAttack','compRelease'].forEach(id=>{
+  els[id].addEventListener('input', applyCompressorParams);
+});
+
+// Stereo Panner
+els.panSlider.addEventListener('input', () => {
+  ensureCtx();
+  if (!stereoPanner) {
+    stereoPanner = audioCtx.createStereoPanner();
+    // Insert in chain
+    mediaElementSource.disconnect();
+    mediaElementSource.connect(stereoPanner);
+    stereoPanner.connect(masterGain);
+  }
+  stereoPanner.pan.value = parseFloat(els.panSlider.value);
+});
+
+function initMousePan() {
+  let isMousePan = false;
+  els.mousePanToggle.addEventListener('change', (e) => {
+    isMousePan = e.target.checked;
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!isMousePan) return;
+    if (!stereoPanner) return;
+    const xNorm = e.clientX / window.innerWidth;
+    stereoPanner.pan.value = xNorm * 2 - 1;
+    els.panSlider.value = stereoPanner.pan.value;
+  });
+}
+
+// Delay
+els.delayEnableBtn.addEventListener('click', () => {
+  ensureCtx();
+  if (!delayNode) {
+    delayNode = audioCtx.createDelay(1.0);
+    delayFeedbackGain = audioCtx.createGain();
+    delayDryGain = audioCtx.createGain();
+    delayWetGain = audioCtx.createGain();
+
+    // Wiring:
+    // media -> dryGain -> master
+    // media -> delayNode -> feedbackGain -> delayNode (feedback loop)
+    // delayNode -> wetGain -> master
+    mediaElementSource.disconnect();
+    mediaElementSource.connect(delayDryGain);
+    mediaElementSource.connect(delayNode);
+
+    delayNode.connect(delayFeedbackGain);
+    delayFeedbackGain.connect(delayNode); // feedback
+
+    delayNode.connect(delayWetGain);
+
+    delayDryGain.connect(masterGain);
+    delayWetGain.connect(masterGain);
+  }
+  updateDelayParams();
+});
+
+els.delayDisableBtn.addEventListener('click', () => {
+  if (!delayNode) return;
+  try {
+    mediaElementSource.disconnect();
+    delayDryGain?.disconnect();
+    delayNode?.disconnect();
+    delayFeedbackGain?.disconnect();
+    delayWetGain?.disconnect();
+  } catch {}
+  mediaElementSource.connect(masterGain);
+  delayNode = null;
+  delayFeedbackGain = null;
+  delayDryGain = null;
+  delayWetGain = null;
+});
+
+['delayTime','delayFeedback','delayMix'].forEach(id=>{
+  els[id].addEventListener('input', updateDelayParams);
+});
+function updateDelayParams() {
+  if (!delayNode || !delayFeedbackGain || !delayDryGain || !delayWetGain) return;
+  delayNode.delayTime.value = parseFloat(els.delayTime.value);
+  delayFeedbackGain.gain.value = parseFloat(els.delayFeedback.value);
+  const mix = parseFloat(els.delayMix.value);
+  delayDryGain.gain.value = 1 - mix;
+  delayWetGain.gain.value = mix;
+}
+
+// Distortion
+els.distEnableBtn.addEventListener('click', () => {
+  ensureCtx();
+  if (!distortion) {
+    distortion = audioCtx.createWaveShaper();
+    distortionDryGain = audioCtx.createGain();
+    distortionWetGain = audioCtx.createGain();
+
+    mediaElementSource.disconnect();
+    mediaElementSource.connect(distortionDryGain);
+    mediaElementSource.connect(distortion);
+
+    distortion.connect(distortionWetGain);
+
+    distortionDryGain.connect(masterGain);
+    distortionWetGain.connect(masterGain);
+  }
+  applyDistortionParams();
+});
+
+els.distDisableBtn.addEventListener('click', () => {
+  if (!distortion) return;
+  try {
+    mediaElementSource.disconnect();
+    distortion?.disconnect();
+    distortionDryGain?.disconnect();
+    distortionWetGain?.disconnect();
+  } catch {}
+  mediaElementSource.connect(masterGain);
+  distortion = null;
+  distortionDryGain = null;
+  distortionWetGain = null;
+});
+
+['distAmount','distOversample','distMix'].forEach(id=>{
+  els[id].addEventListener('input', applyDistortionParams);
+});
+function makeDistCurve(amount) {
+  // TODO: Implement your own curve function
+  // Example approach: generate a curve based on arctangent or exponential shaping
+  const n = 2048;
+  const curve = new Float32Array(n);
+  const k = amount;
+  for (let i = 0; i < n; i++) {
+    const x = (i / n) * 2 - 1;
+    curve[i] = (1 + k) * x / (1 + k * Math.abs(x));
+  }
+  return curve;
+}
+function applyDistortionParams() {
+  if (!distortion || !distortionDryGain || !distortionWetGain) return;
+  const amount = parseFloat(els.distAmount.value);
+  distortion.curve = makeDistCurve(amount);
+  distortion.oversample = els.distOversample.value;
+  const mix = parseFloat(els.distMix.value);
+  distortionDryGain.gain.value = 1 - mix;
+  distortionWetGain.gain.value = mix;
+}
+
+// ----- Filters (BiquadFilterNode) -----
+function enableFilter(type, refs) {
+  ensureCtx();
+  const { nodeRefName, freqEl, qEl, gainEl } = refs;
+  if (!window[nodeRefName]) {
+    const biq = audioCtx.createBiquadFilter();
+    biq.type = type;
+    window[nodeRefName] = biq;
+
+    // Insert into chain between mediaElementSource and masterGain:
+    mediaElementSource.disconnect();
+    mediaElementSource.connect(biq);
+    biq.connect(masterGain);
+
+    applyFilterParams(biq, freqEl, qEl, gainEl);
+  }
+}
+function disableFilter(refName) {
+  const biq = window[refName];
+  if (!biq) return;
+  try { mediaElementSource.disconnect(); biq.disconnect(); } catch {}
+  mediaElementSource.connect(masterGain);
+  window[refName] = null;
+}
+function applyFilterParams(biq, freqEl, qEl, gainEl) {
+  if (!biq) return;
+  if (freqEl) biq.frequency.value = parseFloat(freqEl.value);
+  if (qEl) biq.Q.value = parseFloat(qEl.value);
+  if (gainEl) biq.gain.value = parseFloat(gainEl.value);
+}
+
+// Low-pass
+els.lpEnableBtn.addEventListener('click', () => enableFilter('lowpass', {
+  nodeRefName: 'lpFilter', freqEl: els.lpFreq, qEl: els.lpQ
+}));
+els.lpDisableBtn.addEventListener('click', () => disableFilter('lpFilter'));
+[els.lpFreq, els.lpQ].forEach(el => el.addEventListener('input', () => {
+  if (lpFilter) applyFilterParams(lpFilter, els.lpFreq, els.lpQ);
+}));
+
+// High-pass
+els.hpEnableBtn.addEventListener('click', () => enableFilter('highpass', {
+  nodeRefName: 'hpFilter', freqEl: els.hpFreq, qEl: els.hpQ
+}));
+els.hpDisableBtn.addEventListener('click', () => disableFilter('hpFilter'));
+[els.hpFreq, els.hpQ].forEach(el => el.addEventListener('input', () => {
+  if (hpFilter) applyFilterParams(hpFilter, els.hpFreq, els.hpQ);
+}));
+
+// Band-pass
+els.bpEnableBtn.addEventListener('click', () => enableFilter('bandpass', {
+  nodeRefName: 'bpFilter', freqEl: els.bpFreq, qEl: els.bpQ
+}));
+els.bpDisableBtn.addEventListener('click', () => disableFilter('bpFilter'));
+[els.bpFreq, els.bpQ].forEach(el => el.addEventListener('input', () => {
+  if (bpFilter) applyFilterParams(bpFilter, els.bpFreq, els.bpQ);
+}));
+
+// Notch
+els.ntEnableBtn.addEventListener('click', () => enableFilter('notch', {
+  nodeRefName: 'ntFilter', freqEl: els.ntFreq, qEl: els.ntQ
+}));
+els.ntDisableBtn.addEventListener('click', () => disableFilter('ntFilter'));
+[els.ntFreq, els.ntQ].forEach(el => el.addEventListener('input', () => {
+  if (ntFilter) applyFilterParams(ntFilter, els.ntFreq, els.ntQ);
+}));
+
+// Peaking EQ
+els.pkEnableBtn.addEventListener('click', () => enableFilter('peaking', {
+  nodeRefName: 'pkFilter', freqEl: els.pkFreq, qEl: els.pkQ, gainEl: els.pkGain
+}));
+els.pkDisableBtn.addEventListener('click', () => disableFilter('pkFilter'));
+[els.pkFreq, els.pkQ, els.pkGain].forEach(el => el.addEventListener('input', () => {
+  if (pkFilter) applyFilterParams(pkFilter, els.pkFreq, els.pkQ, els.pkGain);
+}));
+
+// ----- Synthesis -----
+els.oscStartBtn.addEventListener('click', () => {
+  ensureCtx();
+  if (oscNode) return; // already running
+  oscNode = audioCtx.createOscillator();
+  oscGainNode = audioCtx.createGain();
+
+  oscNode.type = els.oscType.value;
+  oscNode.frequency.value = parseFloat(els.oscFreq.value);
+  oscNode.detune.value = parseFloat(els.oscDetune.value);
+  oscGainNode.gain.value = parseFloat(els.oscGain.value);
+
+  oscNode.connect(oscGainNode).connect(masterGain);
+  oscNode.start();
+  els.oscStopBtn.disabled = false;
+});
+
+els.oscStopBtn.addEventListener('click', () => {
+  if (!oscNode) return;
+  try { oscNode.stop(); oscGainNode.disconnect(); } catch {}
+  oscNode = null;
+  oscGainNode = null;
+  els.oscStopBtn.disabled = true;
+});
+
+els.oscType.addEventListener('change', () => { if (oscNode) oscNode.type = els.oscType.value; });
+els.oscFreq.addEventListener('input', () => { if (oscNode) oscNode.frequency.value = parseFloat(els.oscFreq.value); });
+els.oscDetune.addEventListener('input', () => { if (oscNode) oscNode.detune.value = parseFloat(els.oscDetune.value); });
+els.oscGain.addEventListener('input', () => { if (oscGainNode) oscGainNode.gain.value = parseFloat(els.oscGain.value); });
+
+// ----- Rhythm (example scheduler using decoded buffers) -----
+// TODO: Load your own drum samples into rhythmBuffers (kick, snare, hat)
+// e.g., fetch('samples/kick.wav') -> decodeAudioData -> rhythmBuffers.kick = audioBuffer
+async function playRhythm(pattern, bpm) {
+  ensureCtx();
+  if (rhythmIsPlaying) return;
+  rhythmIsPlaying = true;
+
+  const spb = 60 / bpm; // seconds per beat
+  let startTime = audioCtx.currentTime + 0.1;
+
+  // Simple 1 bar pattern of 16 steps
+  for (let step = 0; step < 16; step++) {
+    const t = startTime + step * (spb / 4); // 16th notes
+    const hit = pattern[step]; // { kick:bool, snare:bool, hat:bool }
+    if (hit.kick && rhythmBuffers.kick) triggerBuffer(rhythmBuffers.kick, t, 1.0);
+    if (hit.snare && rhythmBuffers.snare) triggerBuffer(rhythmBuffers.snare, t, 0.9);
+    if (hit.hat && rhythmBuffers.hat) triggerBuffer(rhythmBuffers.hat, t, 0.6);
+  }
+
+  // Ends after one bar
+  setTimeout(() => { rhythmIsPlaying = false; }, spb * 4 * 1000);
+}
+
+function triggerBuffer(buffer, when, gainVal) {
+  const src = audioCtx.createBufferSource();
+  src.buffer = buffer;
+  const g = audioCtx.createGain();
+  g.gain.value = gainVal;
+  src.connect(g).connect(masterGain);
+  src.start(when);
+}
+
+els.playRhythm1Btn.addEventListener('click', () => {
+  const bpm = parseInt(els.bpmSlider.value, 10);
+  const pattern = Array.from({ length: 16 }, (_, i) => ({
+    kick: i % 4 === 0,
+    snare: i % 8 === 4,
+    hat: true
+  }));
+  playRhythm(pattern, bpm);
+});
+
+els.playRhythm2Btn.addEventListener('click', () => {
+  const bpm = parseInt(els.bpmSlider.value, 10);
+  const pattern = Array.from({ length: 16 }, (_, i) => ({
+    kick: i % 8 === 0,
+    snare: i % 8 === 4,
+    hat: i % 2 === 0
+  }));
+  playRhythm(pattern, bpm);
+});
+
+// ----- Impulse loading (Reverb) helper -----
+// TODO: Implement your own asset loading and decoding for impulse responses.
+// Example approach:
+// async function loadIR(url) {
+//   const res = await fetch(url);
+//   const arr = await res.arrayBuffer();
+//   const buf = await audioCtx.decodeAudioData(arr);
+//   return buf;
+// }
+// Then set convolver.buffer = await loadIR(selectedUrl);
+
+// ----- Notes -----
+// - For save/download of the edited file with all processing, consider OfflineAudioContext for full rendering.
+// - MediaRecorder with captureStream is a pragmatic demo approach but may differ across browsers.
+// - Replace TODO sections with your own logic to comply with your coursework policy.

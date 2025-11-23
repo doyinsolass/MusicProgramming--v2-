@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Web Audio Player</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <h1>Web Audio Player</h1>
+
+  <section>
+    <h2>Audio file</h2>
+    <input type="file" id="fileInput" accept="audio/*" />
+    <div>
+      <button id="playBtn" disabled>Play</button>
+      <button id="pauseBtn" disabled>Pause</button>
+      <button id="stopBtn" disabled>Stop</button>
+      <label><input type="checkbox" id="loopToggle" />Loop</label>
+    </div>
+
+    <audio id="htmlAudio" crossorigin hidden></audio>
+
+    <div>
+      <button id="startRecBtn" disabled>Start recording</button>
+      <button id="stopRecBtn" disabled>Stop and download</button>
+      <a id="downloadLink" class="hidden">Download</a>
+    </div>
+  </section>
+
+  <hr>
+
+  <section>
+    <h2>Visualization</h2>
+    <canvas id="analyserCanvas" width="800" height="200"></canvas>
+    <div>
+      <label>Smoothing <input type="range" id="smoothingSlider" min="0" max="0.99" step="0.01" value="0.8" /></label>
+      <label>FFT <select id="fftSizeSelect">
+        <option>256</option>
+        <option>512</option>
+        <option selected>1024</option>
+        <option>2048</option>
+        <option>4096</option>
+      </select></label>
+      <label>Mode <select id="vizModeSelect">
+        <option value="spectrum" selected>Spectrum</option>
+        <option value="waveform">Waveform</option>
+      </select></label>
+    </div>
+  </section>
+
+  <hr>
+
+  <section>
+    <h2>Effects</h2>
+
+    <div>
+      <h3>Reverb</h3>
+      <select id="impulseSelect">
+        <option value="factory.hall.wav">Factory Hall</option>
+        <option value="pa.horn.in.hall.wav">PA Horn</option>
+        <option value="blaupunkt.tube.radio.wav">Blaupunkt</option>
+        <option value="church.schellingwoude.wav">Church</option>
+      </select>
+      <label>Mix <input type="range" id="reverbMix" min="0" max="1" step="0.01" value="0.5" /></label>
+      <button id="reverbEnableBtn">Enable</button>
+      <button id="reverbDisableBtn">Disable</button>
+    </div>
+
+    <div>
+      <h3>Compressor</h3>
+      <label>Threshold <input type="range" id="compThreshold" min="-100" max="0" step="1" value="-24" /></label>
+      <label>Knee <input type="range" id="compKnee" min="0" max="40" step="1" value="30" /></label>
+      <label>Ratio <input type="range" id="compRatio" min="1" max="20" step="1" value="12" /></label>
+      <label>Attack <input type="range" id="compAttack" min="0" max="1" step="0.01" value="0.003" /></label>
+      <label>Release <input type="range" id="compRelease" min="0" max="1" step="0.01" value="0.25" /></label>
+      <button id="compAddBtn">Add</button>
+      <button id="compRemoveBtn">Remove</button>
+    </div>
+
+    <div>
+      <h3>Panner</h3>
+      <label>Panning <input type="range" id="panSlider" min="-1" max="1" step="0.1" value="0" /></label>
+      <label><input type="checkbox" id="mousePanToggle" />Mouse</label>
+    </div>
+
+    <div>
+      <h3>Delay</h3>
+      <label>Time <input type="range" id="delayTime" min="0" max="1" step="0.01" value="0.25" /></label>
+      <label>Feedback <input type="range" id="delayFeedback" min="0" max="0.95" step="0.01" value="0.4" /></label>
+      <label>Mix <input type="range" id="delayMix" min="0" max="1" step="0.01" value="0.5" /></label>
+      <button id="delayEnableBtn">Enable</button>
+      <button id="delayDisableBtn">Disable</button>
+    </div>
+
+    <div>
+      <h3>Distortion</h3>
+      <label>Amount <input type="range" id="distAmount" min="0" max="1000" step="10" value="200" /></label>
+      <select id="distOversample">
+        <option value="none">none</option>
+        <option value="2x" selected>2x</option>
+        <option value="4x">4x</option>
+      </select>
+      <label>Mix <input type="range" id="distMix" min="0" max="1" step="0.01" value="0.5" /></label>
+      <button id="distEnableBtn">Enable</button>
+      <button id="distDisableBtn">Disable</button>
+    </div>
+  </section>
+
+  <hr>
+
+  <section>
+    <h2>Filters</h2>
+
+    <div>
+      <h3>Low-pass</h3>
+      <label>Freq <input type="range" id="lpFreq" min="50" max="12000" step="1" value="1200" /></label>
+      <label>Q <input type="range" id="lpQ" min="0.1" max="20" step="0.1" value="1" /></label>
+      <button id="lpEnableBtn">Enable</button>
+      <button id="lpDisableBtn">Disable</button>
+    </div>
+
+    <div>
+      <h3>High-pass</h3>
+      <label>Freq <input type="range" id="hpFreq" min="50" max="12000" step="1" value="200" /></label>
+      <label>Q <input type="range" id="hpQ" min="0.1" max="20" step="0.1" value="1" /></label>
+      <button id="hpEnableBtn">Enable</button>
+      <button id="hpDisableBtn">Disable</button>
+    </div>
+
+    <div>
+      <h3>Band-pass</h3>
+      <label>Freq <input type="range" id="bpFreq" min="100" max="8000" step="1" value="1000" /></label>
+      <label>Q <input type="range" id="bpQ" min="0.1" max="20" step="0.1" value="2" /></label>
+      <button id="bpEnableBtn">Enable</button>
+      <button id="bpDisableBtn">Disable</button>
+    </div>
+
+    <div>
+      <h3>Notch</h3>
+      <label>Freq <input type="range" id="ntFreq" min="100" max="8000" step="1" value="1000" /></label>
+      <label>Q <input type="range" id="ntQ" min="0.1" max="20" step="0.1" value="5" /></label>
+      <button id="ntEnableBtn">Enable</button>
+      <button id="ntDisableBtn">Disable</button>
+    </div>
+
+    <div>
+      <h3>Peaking</h3>
+      <label>Freq <input type="range" id="pkFreq" min="100" max="8000" step="1" value="2000" /></label>
+      <label>Q <input type="range" id="pkQ" min="0.1" max="20" step="0.1" value="1" /></label>
+      <label>Gain <input type="range" id="pkGain" min="-20" max="20" step="0.5" value="0" /></label>
+      <button id="pkEnableBtn">Enable</button>
+      <button id="pkDisableBtn">Disable</button>
+    </div>
+  </section>
+
+  <hr>
+
+  <section>
+    <h2>Oscillator</h2>
+    <label>Type <select id="oscType">
+      <option value="sine" selected>sine</option>
+      <option value="square">square</option>
+      <option value="sawtooth">sawtooth</option>
+      <option value="triangle">triangle</option>
+    </select></label>
+    <label>Freq <input type="range" id="oscFreq" min="20" max="20000" step="1" value="220" /></label>
+    <label>Detune <input type="range" id="oscDetune" min="-1200" max="1200" step="1" value="0" /></label>
+    <label>Gain <input type="range" id="oscGain" min="0" max="1" step="0.01" value="0.5" /></label>
+    <button id="oscStartBtn">Start</button>
+    <button id="oscStopBtn" disabled>Stop</button>
+  </section>
+
+  <hr>
+
+  <section>
+    <h2>Rhythm</h2>
+    <label>BPM <input type="range" id="bpmSlider" min="40" max="200" step="1" value="120" /></label>
+    <button id="playRhythm1Btn">Rhythm 1</button>
+    <button id="playRhythm2Btn">Rhythm 2</button>
+  </section>
+
+  <script src="./script.js"></script>
+</body>
+</html>
