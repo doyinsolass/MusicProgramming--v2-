@@ -129,10 +129,19 @@ function ensureCtx() {
 function connectMediaElement() {
   ensureCtx();
   if (!mediaElementSource) {
-    mediaElementSource = audioCtx.createMediaElementSource(els.htmlAudio);
-    mediaElementSource.connect(masterGain);
+    try {
+      mediaElementSource = audioCtx.createMediaElementSource(els.htmlAudio);
+      mediaElementSource.connect(masterGain);
+      console.log('Media element connected to audio context');
+    } catch (err) {
+      console.error('Failed to connect media element:', err);
+    }
   }
 }
+
+els.reverbMix.addEventListener('input', () => {
+  updateReverbMix();
+});
 
 els.fileInput.addEventListener('change', async function (e) {
   const file = e.target.files?.[0];
@@ -147,13 +156,21 @@ els.fileInput.addEventListener('change', async function (e) {
   els.playBtn.disabled = false;
   els.pauseBtn.disabled = false;
   els.stopBtn.disabled = false;
+  
+  console.log('Audio file loaded:', file.name);
 });
 
 els.playBtn.addEventListener('click', async () => {
   ensureCtx();
-  await audioCtx.resume();
-  els.htmlAudio.loop = els.loopToggle.checked;
-  els.htmlAudio.play();
+  try {
+    await audioCtx.resume();
+    els.htmlAudio.loop = els.loopToggle.checked;
+    els.htmlAudio.play();
+    console.log('Playing audio...');
+  } catch (err) {
+    console.error('Playback error:', err);
+    alert('Could not play audio: ' + err.message);
+  }
 });
 
 els.pauseBtn.addEventListener('click', () => {
@@ -586,6 +603,14 @@ els.oscGain.addEventListener('input', () => { if (oscGainNode) oscGainNode.gain.
 async function playRhythm(pattern, bpm) {
   ensureCtx();
   if (rhythmIsPlaying) return;
+  
+  // Check if buffers are loaded
+  if (!rhythmBuffers.kick || !rhythmBuffers.snare || !rhythmBuffers.hat) {
+    alert('Drum samples not loaded. This feature requires audio files.');
+    console.warn('Rhythm buffers empty:', rhythmBuffers);
+    return;
+  }
+  
   rhythmIsPlaying = true;
 
   const spb = 60 / bpm;
