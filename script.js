@@ -106,6 +106,11 @@ const els = {
   bpmSlider: document.getElementById('bpmSlider'),
   playRhythm1Btn: document.getElementById('playRhythm1Btn'),
   playRhythm2Btn: document.getElementById('playRhythm2Btn'),
+
+  // user sample inputs (added)
+  kickSampleInput: document.getElementById('kickSampleInput'),
+  snareSampleInput: document.getElementById('snareSampleInput'),
+  hatSampleInput: document.getElementById('hatSampleInput'),
 };
 
 function ensureCtx() {
@@ -772,5 +777,102 @@ async function ensureAudioContextRunning(audioCtx) {
 els.loopToggle.addEventListener('change', () => {
   if (els.htmlAudio) els.htmlAudio.loop = els.loopToggle.checked;
 });
+
+// decode a user-selected File into an AudioBuffer
+async function decodeFileToAudioBuffer(file) {
+  if (!file) return null;
+  ensureCtx();
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    return audioBuffer;
+  } catch (err) {
+    console.warn('Failed to decode sample', file.name, err);
+    return null;
+  }
+}
+
+// helper: enable rhythm buttons when all three buffers present
+function updateRhythmButtonsEnabled() {
+  const ok = !!(rhythmBuffers.kick && rhythmBuffers.snare && rhythmBuffers.hat);
+  els.playRhythm1Btn.disabled = !ok;
+  els.playRhythm2Btn.disabled = !ok;
+  if (ok) console.log('User rhythm samples ready');
+}
+
+// wire user file inputs
+els.kickSampleInput?.addEventListener('change', async (e) => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  const buf = await decodeFileToAudioBuffer(f);
+  if (buf) {
+    rhythmBuffers.kick = buf;
+    console.log('Loaded kick sample:', f.name);
+  } else {
+    rhythmBuffers.kick = null;
+  }
+  updateRhythmButtonsEnabled();
+});
+
+els.snareSampleInput?.addEventListener('change', async (e) => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  const buf = await decodeFileToAudioBuffer(f);
+  if (buf) {
+    rhythmBuffers.snare = buf;
+    console.log('Loaded snare sample:', f.name);
+  } else {
+    rhythmBuffers.snare = null;
+  }
+  updateRhythmButtonsEnabled();
+});
+
+els.hatSampleInput?.addEventListener('change', async (e) => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  const buf = await decodeFileToAudioBuffer(f);
+  if (buf) {
+    rhythmBuffers.hat = buf;
+    console.log('Loaded hat sample:', f.name);
+  } else {
+    rhythmBuffers.hat = null;
+  }
+  updateRhythmButtonsEnabled();
+});
+
+// If you previously had bundled-sample loading, keep it as fallback: user uploads override it.
+/* legacy bundled samples (remove in final app)
+const bundledSamples = {
+  kick: 'samples/kick.wav',
+  snare: 'samples/snare.wav',
+  hat: 'samples/hihat.wav',
+};
+
+async function loadBundledSample(name) {
+  ensureCtx();
+  const url = bundledSamples[name];
+  if (!url) return null;
+  try {
+    const response = await fetch(url);
+    const arrayBuffer = await response.arrayBuffer();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    return audioBuffer;
+  } catch (err) {
+    console.warn('Failed to load bundled sample', name, err);
+    return null;
+  }
+}
+
+Promise.all([
+  loadBundledSample('kick'),
+  loadBundledSample('snare'),
+  loadBundledSample('hat'),
+]).then((buffers) => {
+  rhythmBuffers.kick = buffers[0];
+  rhythmBuffers.snare = buffers[1];
+  rhythmBuffers.hat = buffers[2];
+  updateRhythmButtonsEnabled();
+});
+*/
 
 

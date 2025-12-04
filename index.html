@@ -178,8 +178,24 @@
   <section>
     <h2>Rhythm</h2>
     <label>BPM <input type="range" id="bpmSlider" min="40" max="200" step="1" value="120" /></label>
-    <button id="playRhythm1Btn">Rhythm 1</button>
-    <button id="playRhythm2Btn">Rhythm 2</button>
+    <button id="playRhythm1Btn" disabled>Rhythm 1</button>
+    <button id="playRhythm2Btn" disabled>Rhythm 2</button>
+
+    <!-- user-uploaded samples for rhythm (added) -->
+    <div class="section-row" style="margin-top:12px;">
+      <div>
+        <h3 style="margin:0 0 8px 0;font-size:14px;">Rhythm samples</h3>
+        <label style="display:block; margin-bottom:8px;">
+          Kick <input id="kickSampleInput" type="file" accept="audio/*" />
+        </label>
+        <label style="display:block; margin-bottom:8px;">
+          Snare <input id="snareSampleInput" type="file" accept="audio/*" />
+        </label>
+        <label style="display:block; margin-bottom:0;">
+          Hat <input id="hatSampleInput" type="file" accept="audio/*" />
+        </label>
+      </div>
+    </div>
   </section>
 
   <script src="./script.js"></script>
