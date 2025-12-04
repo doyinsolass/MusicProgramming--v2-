@@ -840,39 +840,6 @@ els.hatSampleInput?.addEventListener('change', async (e) => {
   updateRhythmButtonsEnabled();
 });
 
-// If you previously had bundled-sample loading, keep it as fallback: user uploads override it.
-/* legacy bundled samples (remove in final app)
-const bundledSamples = {
-  kick: 'samples/kick.wav',
-  snare: 'samples/snare.wav',
-  hat: 'samples/hihat.wav',
-};
 
-async function loadBundledSample(name) {
-  ensureCtx();
-  const url = bundledSamples[name];
-  if (!url) return null;
-  try {
-    const response = await fetch(url);
-    const arrayBuffer = await response.arrayBuffer();
-    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-    return audioBuffer;
-  } catch (err) {
-    console.warn('Failed to load bundled sample', name, err);
-    return null;
-  }
-}
-
-Promise.all([
-  loadBundledSample('kick'),
-  loadBundledSample('snare'),
-  loadBundledSample('hat'),
-]).then((buffers) => {
-  rhythmBuffers.kick = buffers[0];
-  rhythmBuffers.snare = buffers[1];
-  rhythmBuffers.hat = buffers[2];
-  updateRhythmButtonsEnabled();
-});
-*/
 
 
