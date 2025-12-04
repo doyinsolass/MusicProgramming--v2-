@@ -410,7 +410,7 @@ els.delayDisableBtn.addEventListener('click', () => {
     delayFeedbackGain?.disconnect();
     delayWetGain?.disconnect();
   } catch (err) {
-    // node cleanup failed
+    // this is for the node cleanup if it failed
   }
   mediaElementSource.connect(masterGain);
   delayNode = null;
@@ -431,6 +431,8 @@ function updateDelayParams(){
   delayDryGain.gain.value = 1 - mix;
   delayWetGain.gain.value = mix;
 }
+
+//distortion
 
 els.distEnableBtn.addEventListener('click', () => {
   ensureCtx();
@@ -751,13 +753,8 @@ function addThrottledPointerPan(element, handler, ms = 50) {
   }, { passive: true });
 }
 
-// Example use in your code (adapt variables):
-// initVisualizer(analyserNode);
-// when playback starts: startViz();
-// when playback pauses/stops: stopViz();
-// connect pointer pan: addThrottledPointerPan(document, (e) => { /* update panner based on e.clientX */ });
 
-/* Also: suspend/resume AudioContext when idle (save CPU) */
+/*  pause/play AudioContext when idle (save CPU) */
 async function ensureAudioContextSuspended(audioCtx) {
   if (!audioCtx) return;
   if (audioCtx.state === 'running' && !shouldRunAudio()) {
